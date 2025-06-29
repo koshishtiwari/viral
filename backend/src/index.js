@@ -36,8 +36,17 @@ app.use(helmet());
 app.use(compression());
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || '*',
-    credentials: true
+    origin: [
+      'http://localhost:8081', 
+      'http://localhost:3001', 
+      'http://172.26.95.185:8081',
+      process.env.FRONTEND_URL || '*'
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204
   })
 );
 
@@ -133,9 +142,12 @@ app.use('*', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-server.listen(PORT, () => {
-  logger.info(`🚀 Pipal Backend Server running on port ${PORT}`);
-  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+// Only start server if not in test environment
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(PORT, () => {
+    logger.info(`🚀 Pipal Backend Server running on port ${PORT}`);
+    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
 
 module.exports = { app, server, io };
