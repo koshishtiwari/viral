@@ -6,287 +6,354 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
+  Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useLikePostMutation, useUnlikePostMutation } from '../api/feedApi';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../constants/theme';
-import { formatRelativeTime, formatPrice, formatNumber } from '../utils/formatters';
-import { showErrorToast } from '../utils/notifications';
+import { useLikePostMutation } from '../api/feedApi';
+import { Colors } from '../constants/theme';
+import { formatRelativeTime } from '../utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const IMAGE_HEIGHT = SCREEN_WIDTH * 0.75;
+const POST_HEIGHT = SCREEN_WIDTH * 1.25;
 
-const PostCard = ({ post }) => {
+const PostCard = ({ post, index, isFirst, isLast }) => {
   const [isLiked, setIsLiked] = useState(post.isLiked || false);
   const [likeCount, setLikeCount] = useState(post.likes_count || 0);
+  const [voteCount, setVoteCount] = useState(post.votes_count || 0);
   
   const [likePost] = useLikePostMutation();
-  const [unlikePost] = useUnlikePostMutation();
 
-  // Extract image URL from media array
-  const imageUrl = post.media && post.media.length > 0 ? post.media[0].url : null;
+  const imageUrl = post.media && post.media.length > 0 
+    ? post.media[0].url 
+    : post.product_images?.[0] || 'https://via.placeholder.com/400x500.png?text=No+Image';
   
-  // Build user object from flat structure
-  const user = {
-    username: post.username,
-    profilePicture: post.profile_image_url,
-    isVerified: post.is_verified,
-  };
-  
-  // Build product object from flat structure
-  const product = {
-    title: post.product_title,
-    price: parseFloat(post.price),
-    images: post.product_images,
-  };
+  const isVideo = post.type === 'story' && post.media && post.media[0]?.type === 'video';
+  const isLive = post.type === 'live_announcement';
+  const isOnSale = post.is_on_sale;
+  const originalPrice = parseFloat(post.price);
+  const displayPrice = isOnSale && post.sale_price ? parseFloat(post.sale_price) : originalPrice;
 
   const handleLike = async () => {
     const wasLiked = isLiked;
     const prevCount = likeCount;
-    
-    // Optimistic update
     setIsLiked(!wasLiked);
     setLikeCount(wasLiked ? prevCount - 1 : prevCount + 1);
     
     try {
-      if (wasLiked) {
-        await unlikePost(post.id).unwrap();
-      } else {
-        await likePost(post.id).unwrap();
-      }
+      await likePost(post.id).unwrap();
     } catch (error) {
-      // Revert on error
       setIsLiked(wasLiked);
       setLikeCount(prevCount);
-      showErrorToast('Error', 'Failed to update like');
+      console.error('Failed to like post:', error);
     }
   };
 
-  const renderUserInfo = () => (
-    <View style={styles.userContainer}>
-      <Image
-        source={{ uri: user.profilePicture || 'https://via.placeholder.com/40' }}
-        style={styles.userAvatar}
-      />
-      <View style={styles.userInfo}>
-        <Text style={styles.username}>{user.username}</Text>
-        <Text style={styles.timestamp}>{formatRelativeTime(post.created_at)}</Text>
-      </View>
-    </View>
-  );
-
-  const renderProductInfo = () => {
-    if (!product) return null;
-    
-    return (
-      <View style={styles.productContainer}>
-        <Text style={styles.productTitle}>{product.title}</Text>
-        <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
-      </View>
-    );
+  const handleVote = () => {
+    setVoteCount(prev => prev + 1);
   };
 
-  const renderActions = () => (
-    <View style={styles.actionsContainer}>
-      <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
-        <Ionicons
-          name={isLiked ? 'heart' : 'heart-outline'}
-          size={24}
-          color={isLiked ? Colors.error : Colors.text.primary}
-        />
-        <Text style={styles.actionText}>{formatNumber(likeCount)}</Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity style={styles.actionButton}>
-        <Ionicons name="chatbubble-outline" size={24} color={Colors.text.primary} />
-        <Text style={styles.actionText}>{formatNumber(post.comments_count || 0)}</Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity style={styles.actionButton}>
-        <Ionicons name="share-outline" size={24} color={Colors.text.primary} />
-      </TouchableOpacity>
-      
-      <View style={styles.spacer} />
-      
-      {product && (
-        <TouchableOpacity style={styles.shopButton}>
-          <Ionicons name="bag-outline" size={20} color={Colors.text.white} />
-          <Text style={styles.shopButtonText}>Shop</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `Check out this ${post.product_title} by @${post.username} on Pipal!`,
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
 
   return (
-    <View style={styles.container}>
-      {renderUserInfo()}
-      
-      <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: imageUrl || 'https://via.placeholder.com/400x300' }}
-          style={styles.postImage}
-          resizeMode="cover"
-        />
-        {product && renderProductInfo()}
-      </View>
-      
-      {post.caption && (
-        <View style={styles.captionContainer}>
-          <Text style={styles.caption} numberOfLines={3}>
-            {post.caption}
-          </Text>
-        </View>
-      )}
-      
-      {post.tags && post.tags.length > 0 && (
-        <View style={styles.tagsContainer}>
-          {post.tags.slice(0, 3).map((tag, index) => (
-            <View key={index} style={styles.tag}>
-              <Text style={styles.tagText}>#{tag}</Text>
+    <View style={[styles.container, isFirst && styles.firstPost, isLast && styles.lastPost]}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.userInfo}>
+          <Image
+            source={{ uri: post.profile_image_url || 'https://via.placeholder.com/40x40.png?text=U' }}
+            style={styles.avatar}
+          />
+          <View style={styles.userDetails}>
+            <View style={styles.usernameRow}>
+              <Text style={styles.username}>{post.username}</Text>
+              {post.is_verified && (
+                <Ionicons name="checkmark-circle" size={16} color={Colors.primary} />
+              )}
             </View>
-          ))}
+            <Text style={styles.timestamp}>{formatRelativeTime(post.created_at)}</Text>
+          </View>
+        </TouchableOpacity>
+        
+        {(isVideo || isLive) && (
+          <View style={[styles.badge, isLive && styles.liveBadge]}>
+            <Ionicons name={isLive ? "radio" : "play"} size={12} color="white" />
+            <Text style={styles.badgeText}>{isLive ? 'LIVE' : 'VIDEO'}</Text>
+          </View>
+        )}
+      </View>
+
+      <TouchableOpacity>
+        <View style={styles.mediaContainer}>
+          <Image source={{ uri: imageUrl }} style={styles.media} resizeMode="cover" />
+          {isVideo && (
+            <View style={styles.playButton}>
+              <Ionicons name="play" size={24} color="white" />
+            </View>
+          )}
+          {isLive && (
+            <View style={styles.liveIndicator}>
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
+          )}
         </View>
-      )}
-      
-      {renderActions()}
+      </TouchableOpacity>
+
+      <View style={styles.actions}>
+        <View style={styles.leftActions}>
+          <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
+            <Ionicons 
+              name={isLiked ? "heart" : "heart-outline"} 
+              size={24} 
+              color={isLiked ? "#E91E63" : "#333"} 
+            />
+            <Text style={styles.actionCount}>{likeCount}</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.actionButton}>
+            <Ionicons name="chatbubble-outline" size={22} color="#333" />
+            <Text style={styles.actionCount}>{post.comments_count || 0}</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
+            <Ionicons name="share-outline" size={22} color="#333" />
+          </TouchableOpacity>
+        </View>
+        
+        {isLive && (
+          <TouchableOpacity style={styles.voteButton} onPress={handleVote}>
+            <Ionicons name="flash" size={20} color="#FF9500" />
+            <Text style={styles.voteText}>Vote Live ({voteCount})</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.content}>
+        <TouchableOpacity>
+          <Text style={styles.productTitle}>{post.product_title}</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.price}>${displayPrice.toFixed(2)}</Text>
+            {isOnSale && (
+              <Text style={styles.originalPrice}>${originalPrice.toFixed(2)}</Text>
+            )}
+            {isOnSale && (
+              <View style={styles.saleTag}>
+                <Text style={styles.saleText}>SALE</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+        
+        {post.caption && (
+          <Text style={styles.caption}>
+            <Text style={styles.username}>{post.username}</Text> {post.caption}
+          </Text>
+        )}
+        
+        {post.tags && post.tags.length > 0 && (
+          <View style={styles.tags}>
+            {post.tags.slice(0, 3).map((tag, idx) => (
+              <Text key={idx} style={styles.tag}>#{tag}</Text>
+            ))}
+          </View>
+        )}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: Colors.background.primary,
-    marginBottom: Spacing.md,
-    paddingBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    backgroundColor: 'white',
+    marginBottom: 24,
   },
-  userContainer: {
+  firstPost: {
+    marginTop: 8,
+  },
+  lastPost: {
+    marginBottom: 32,
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  userAvatar: {
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.grey.light,
+    marginRight: 12,
   },
-  userInfo: {
-    marginLeft: Spacing.sm,
+  userDetails: {
     flex: 1,
   },
-  username: {
-    fontSize: Typography.fontSize.md,
-    fontWeight: Typography.fontWeight.semiBold,
-    color: Colors.text.primary,
-  },
-  timestamp: {
-    fontSize: Typography.fontSize.sm,
-    color: Colors.text.secondary,
-    marginTop: 2,
-  },
-  imageContainer: {
-    position: 'relative',
-  },
-  postImage: {
-    width: SCREEN_WIDTH,
-    height: IMAGE_HEIGHT,
-    backgroundColor: Colors.grey.light,
-  },
-  productContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  productTitle: {
-    fontSize: Typography.fontSize.md,
-    fontWeight: Typography.fontWeight.medium,
-    color: Colors.text.white,
-    marginBottom: 2,
-  },
-  productPrice: {
-    fontSize: Typography.fontSize.lg,
-    fontWeight: Typography.fontWeight.bold,
-    color: Colors.accent,
-  },
-  discountBadge: {
-    position: 'absolute',
-    top: Spacing.sm,
-    right: Spacing.sm,
-    backgroundColor: Colors.error,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.xs,
-  },
-  discountText: {
-    fontSize: Typography.fontSize.xs,
-    fontWeight: Typography.fontWeight.bold,
-    color: Colors.text.white,
-  },
-  captionContainer: {
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.sm,
-  },
-  caption: {
-    fontSize: Typography.fontSize.md,
-    color: Colors.text.primary,
-    lineHeight: Typography.lineHeight.normal * Typography.fontSize.md,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.sm,
-  },
-  tag: {
-    backgroundColor: Colors.background.secondary,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.xs,
-    marginRight: Spacing.xs,
-  },
-  tagText: {
-    fontSize: Typography.fontSize.sm,
-    color: Colors.text.secondary,
-  },
-  actionsContainer: {
+  usernameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.sm,
+  },
+  username: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+    marginRight: 4,
+  },
+  timestamp: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#333',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  liveBadge: {
+    backgroundColor: '#E91E63',
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  mediaContainer: {
+    position: 'relative',
+  },
+  media: {
+    width: SCREEN_WIDTH,
+    height: POST_HEIGHT,
+  },
+  playButton: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -20 }, { translateY: -20 }],
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  liveIndicator: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    backgroundColor: '#E91E63',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  liveText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  leftActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: Spacing.lg,
+    marginRight: 20,
   },
-  actionText: {
-    fontSize: Typography.fontSize.sm,
-    color: Colors.text.secondary,
-    marginLeft: Spacing.xs,
+  actionCount: {
+    fontSize: 12,
+    color: '#333',
+    marginLeft: 4,
+    fontWeight: '500',
   },
-  spacer: {
-    flex: 1,
-  },
-  shopButton: {
+  voteButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    ...Shadows.sm,
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
-  shopButtonText: {
-    fontSize: Typography.fontSize.sm,
-    fontWeight: Typography.fontWeight.medium,
-    color: Colors.text.white,
-    marginLeft: Spacing.xs,
+  voteText: {
+    fontSize: 12,
+    color: '#FF9500',
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  productTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 4,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  price: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#000',
+  },
+  originalPrice: {
+    fontSize: 14,
+    color: '#999',
+    textDecorationLine: 'line-through',
+    marginLeft: 8,
+  },
+  saleTag: {
+    backgroundColor: '#E91E63',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  saleText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  caption: {
+    fontSize: 14,
+    color: '#000',
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  tags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  tag: {
+    fontSize: 12,
+    color: '#1976D2',
+    marginRight: 8,
+    marginBottom: 4,
   },
 });
 

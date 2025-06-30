@@ -1,5 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit';
-import * as SecureStore from 'expo-secure-store';
+import { setItem, getItem, removeItem } from '../utils/storage';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'user_data';
@@ -64,13 +64,8 @@ export const {
 // Async thunks for secure storage
 export const persistAuth = (user, token) => async (dispatch) => {
   try {
-    // Add safety check for SecureStore availability
-    if (SecureStore.setItemAsync) {
-      await SecureStore.setItemAsync(TOKEN_KEY, token);
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
-    } else {
-      console.warn('SecureStore not available for persistence');
-    }
+    await setItem(TOKEN_KEY, token);
+    await setItem(USER_KEY, JSON.stringify(user));
     dispatch(loginSuccess({ user, token }));
   } catch (error) {
     console.error('Error persisting auth:', error);
@@ -81,13 +76,8 @@ export const persistAuth = (user, token) => async (dispatch) => {
 
 export const clearAuth = () => async (dispatch) => {
   try {
-    // Add safety check for SecureStore availability
-    if (SecureStore.deleteItemAsync) {
-      await SecureStore.deleteItemAsync(TOKEN_KEY);
-      await SecureStore.deleteItemAsync(USER_KEY);
-    } else {
-      console.warn('SecureStore not available for clearing');
-    }
+    await removeItem(TOKEN_KEY);
+    await removeItem(USER_KEY);
     dispatch(logout());
   } catch (error) {
     console.error('Error clearing auth:', error);
@@ -97,16 +87,9 @@ export const clearAuth = () => async (dispatch) => {
 
 export const loadPersistedAuth = () => async (dispatch) => {
   try {
-    // Add safety check for SecureStore availability
-    if (!SecureStore.getItemAsync) {
-      console.warn('SecureStore not available, skipping auth persistence');
-      dispatch(setInitialAuth({ user: null, token: null }));
-      return;
-    }
-
     const [token, userData] = await Promise.all([
-      SecureStore.getItemAsync(TOKEN_KEY),
-      SecureStore.getItemAsync(USER_KEY),
+      getItem(TOKEN_KEY),
+      getItem(USER_KEY),
     ]);
 
     if (token && userData) {

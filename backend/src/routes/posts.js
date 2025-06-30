@@ -20,18 +20,33 @@ router.get('/feed', async (req, res) => {
         'users.username',
         'users.profile_image_url',
         'users.is_verified',
+        'users.followers_count',
         'products.title as product_title',
         'products.price',
-        'products.images as product_images'
+        'products.compare_at_price as sale_price',
+        'products.images as product_images',
+        db.raw('CASE WHEN products.compare_at_price > products.price THEN true ELSE false END as is_on_sale')
       )
       .where('posts.is_active', true)
       .where('users.is_active', true)
       .where('products.is_active', true)
       .orderBy('posts.created_at', 'desc')
-      .limit(limit)
+      .limit(limit + 1) // Get one extra to check if there are more
       .offset(offset);
 
-    res.json(posts);
+    const hasMore = posts.length > limit;
+    const data = hasMore ? posts.slice(0, limit) : posts;
+
+    res.json({
+      data,
+      hasMore,
+      page,
+      totalCount: await db('posts')
+        .where('posts.is_active', true)
+        .count('* as count')
+        .first()
+        .then(result => result.count)
+    });
   } catch (error) {
     logger.error('Get feed error', error);
     res.status(500).json({ error: 'Failed to get feed' });

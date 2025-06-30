@@ -46,7 +46,7 @@ const TabNavigator = () => {
           let iconName;
 
           switch (route.name) {
-            case 'Discover':
+            case 'Home':
               iconName = focused ? 'home' : 'home-outline';
               break;
             case 'Live':
@@ -80,7 +80,13 @@ const TabNavigator = () => {
         headerShown: false,
       })}
     >
-      <Tab.Screen name="Discover" component={DiscoveryStack} />
+      <Tab.Screen 
+        name="Home" 
+        component={DiscoveryStack}
+        options={{
+          tabBarLabel: 'Home',
+        }}
+      />
       <Tab.Screen name="Live" component={LiveStack} />
       <Tab.Screen name="Cart" component={CartStack} />
       <Tab.Screen name="Profile" component={ProfileStack} />

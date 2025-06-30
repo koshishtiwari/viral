@@ -4,190 +4,222 @@ import {
   FlatList,
   RefreshControl,
   StyleSheet,
+  ActivityIndicator,
   Text,
-  TouchableOpacity,
+  SafeAreaView,
 } from 'react-native';
 import { useGetDiscoveryFeedQuery } from '../../api/feedApi';
-import { Colors, Spacing, Typography } from '../../constants/theme';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import SkeletonLoader from '../../components/SkeletonLoader';
 import PostCard from '../../components/PostCard';
+import LoadingSpinner from '../../components/LoadingSpinner';
+import { Colors } from '../../constants/theme';
+import { useAuth } from '../../hooks/useRedux';
 
 const DiscoveryScreen = () => {
-  const [page, setPage] = useState(1);
+  const auth = useAuth();
+  const [currentPage, setCurrentPage] = useState(1);
+  const [allPosts, setAllPosts] = useState([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  
+
+  // Debug auth state
+  console.log('DiscoveryScreen: Mounted with auth state:', {
+    isAuthenticated: auth.isAuthenticated,
+    user: auth.user?.username,
+    hasToken: !!auth.token
+  });
+
   const {
     data: feedData,
     isLoading,
     isFetching,
+    error,
     refetch,
-  } = useGetDiscoveryFeedQuery({ page, limit: 10 });
-
-  const posts = feedData?.data || [];
-  const hasMore = feedData?.hasMore || false;
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    setPage(1);
-    await refetch();
-    setRefreshing(false);
-  }, [refetch]);
-
-  const loadMore = useCallback(() => {
-    if (hasMore && !isFetching) {
-      setPage(prev => prev + 1);
+  } = useGetDiscoveryFeedQuery(
+    { page: currentPage, limit: 10 },
+    {
+      // Don't skip - always try to load the feed
+      skip: false,
     }
-  }, [hasMore, isFetching]);
-
-  const renderPost = useCallback(({ item }) => (
-    <PostCard post={item} />
-  ), []);
-
-  const renderSkeleton = () => (
-    <View style={styles.skeletonContainer}>
-      {[...Array(3)].map((_, index) => (
-        <View key={index} style={styles.skeletonPost}>
-          <View style={styles.skeletonHeader}>
-            <SkeletonLoader width={40} height={40} borderRadius={20} />
-            <View style={styles.skeletonUserInfo}>
-              <SkeletonLoader width={120} height={16} />
-              <SkeletonLoader width={80} height={12} style={{ marginTop: 4 }} />
-            </View>
-          </View>
-          <SkeletonLoader width="100%" height={250} style={{ marginVertical: 12 }} />
-          <SkeletonLoader width="80%" height={16} />
-          <SkeletonLoader width="60%" height={14} style={{ marginTop: 4 }} />
-        </View>
-      ))}
-    </View>
   );
 
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyTitle}>No posts yet</Text>
-      <Text style={styles.emptyMessage}>Be the first to share something!</Text>
-    </View>
-  );
+  // Update posts when new data arrives
+  React.useEffect(() => {
+    if (feedData && feedData.data) {
+      console.log('DiscoveryScreen: Received', feedData.data.length, 'posts');
+      if (currentPage === 1) {
+        // Reset for refresh or initial load
+        setAllPosts(feedData.data);
+      } else {
+        // Append for pagination
+        setAllPosts(prev => [...prev, ...feedData.data]);
+      }
+      setHasMore(feedData.hasMore || false);
+      setIsLoadingMore(false);
+      setRefreshing(false);
+    } else if (error) {
+      console.error('DiscoveryScreen: API Error:', error);
+      setIsLoadingMore(false);
+      setRefreshing(false);
+    }
+  }, [feedData, currentPage, error, isLoading, isFetching]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    setCurrentPage(1);
+    setAllPosts([]);
+    setHasMore(true);
+    setIsLoadingMore(false);
+  }, []);
+
+  const handleLoadMore = useCallback(() => {
+    if (!isLoadingMore && hasMore && !isFetching && currentPage > 0) {
+      setIsLoadingMore(true);
+      setCurrentPage(prev => prev + 1);
+    }
+  }, [isLoadingMore, hasMore, isFetching, currentPage]);
+
+  const renderPost = useCallback(({ item, index }) => (
+    <PostCard
+      post={item}
+      index={index}
+      isFirst={index === 0}
+      isLast={index === allPosts.length - 1}
+    />
+  ), [allPosts.length]);
 
   const renderFooter = () => {
-    if (!hasMore) return null;
-    
+    if (!isLoadingMore) return null;
     return (
-      <View style={styles.footer}>
-        {isFetching ? (
-          <LoadingSpinner size="small" />
-        ) : (
-          <TouchableOpacity style={styles.loadMoreButton} onPress={loadMore}>
-            <Text style={styles.loadMoreText}>Load More</Text>
-          </TouchableOpacity>
-        )}
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading more posts...</Text>
       </View>
     );
   };
 
-  if (isLoading && page === 1) {
-    return renderSkeleton();
+  const renderEmpty = () => {
+    if (isLoading) return null;
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyTitle}>No posts found</Text>
+        <Text style={styles.emptySubtitle}>
+          Be the first to share something amazing!
+        </Text>
+      </View>
+    );
+  };
+
+  const renderError = () => (
+    <View style={styles.errorContainer}>
+      <Text style={styles.errorTitle}>Something went wrong</Text>
+      <Text style={styles.errorSubtitle}>
+        Pull down to refresh and try again
+      </Text>
+    </View>
+  );
+
+  if (isLoading && currentPage === 1) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LoadingSpinner />
+      </SafeAreaView>
+    );
+  }
+
+  if (error && allPosts.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        {renderError()}
+      </SafeAreaView>
+    );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Discover</Text>
-      </View>
-      
+    <SafeAreaView style={styles.container}>
       <FlatList
-        data={posts}
+        data={allPosts}
         renderItem={renderPost}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item, index) => `${item.id}-${index}`}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={onRefresh}
+            onRefresh={handleRefresh}
             colors={[Colors.primary]}
             tintColor={Colors.primary}
           />
         }
-        ListEmptyComponent={renderEmpty}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.8}
         ListFooterComponent={renderFooter}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.5}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={posts.length === 0 ? styles.emptyList : undefined}
+        ListEmptyComponent={renderEmpty}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={5}
+        windowSize={10}
+        initialNumToRender={3}
+        getItemLayout={(data, index) => ({
+          length: 600, // Approximate post height
+          offset: 600 * index,
+          index,
+        })}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: '#FAFAFA',
   },
-  header: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
-    paddingBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: Typography.fontSize.heading,
-    fontWeight: Typography.fontWeight.bold,
-    color: Colors.text.primary,
-  },
-  emptyList: {
-    flexGrow: 1,
+  loadingText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#666',
   },
   emptyContainer: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Spacing.lg,
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingTop: 100,
   },
   emptyTitle: {
-    fontSize: Typography.fontSize.xl,
-    fontWeight: Typography.fontWeight.semiBold,
-    color: Colors.text.primary,
-    marginBottom: Spacing.sm,
-  },
-  emptyMessage: {
-    fontSize: Typography.fontSize.md,
-    color: Colors.text.secondary,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
     textAlign: 'center',
   },
-  footer: {
-    padding: Spacing.lg,
-    alignItems: 'center',
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
   },
-  loadMoreButton: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: 20,
-    backgroundColor: Colors.background.secondary,
-  },
-  loadMoreText: {
-    fontSize: Typography.fontSize.md,
-    fontWeight: Typography.fontWeight.medium,
-    color: Colors.text.primary,
-  },
-  skeletonContainer: {
-    padding: Spacing.lg,
-  },
-  skeletonPost: {
-    marginBottom: Spacing.xl,
-    paddingBottom: Spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  skeletonHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  skeletonUserInfo: {
-    marginLeft: Spacing.sm,
+  errorContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#E91E63',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 

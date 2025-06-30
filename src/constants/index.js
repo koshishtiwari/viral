@@ -6,9 +6,9 @@ const { width, height } = Dimensions.get('window');
 export const SCREEN_WIDTH = width;
 export const SCREEN_HEIGHT = height;
 
-// API Configuration
+// API Configuration  
 export const API_BASE_URL = __DEV__ 
-  ? 'http://172.26.95.185:3000/api'
+  ? 'http://localhost:3000/api'
   : 'https://your-production-api.com/api';
 
 // Feature flags

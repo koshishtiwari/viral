@@ -165,6 +165,43 @@ exports.seed = async function(knex) {
       type: 'product',
       created_at: knex.fn.now(),
       updated_at: knex.fn.now()
+    },
+    {
+      id: knex.raw('gen_random_uuid()'),
+      user_id: users[0].id,
+      product_id: insertedProducts[0].id,
+      caption: 'Check out how these sneakers look on foot! The fit is perfect and they are so comfortable.',
+      media: JSON.stringify([{type: 'video', url: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=600&h=600&fit=crop'}]),
+      tags: JSON.stringify(['sneakers', 'review', 'video']),
+      is_active: true,
+      type: 'story',
+      created_at: knex.fn.now(),
+      updated_at: knex.fn.now()
+    },
+    {
+      id: knex.raw('gen_random_uuid()'),
+      user_id: users[1] ? users[1].id : users[0].id,
+      product_id: insertedProducts[1].id,
+      caption: 'LIVE NOW: Styling session with vintage denim! Ask me questions and get 20% off!',
+      media: JSON.stringify([{type: 'live', url: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=600&h=600&fit=crop'}]),
+      tags: JSON.stringify(['live', 'styling', 'sale']),
+      is_active: true,
+      type: 'live_announcement',
+      votes_count: 12,
+      created_at: knex.fn.now(),
+      updated_at: knex.fn.now()
+    },
+    {
+      id: knex.raw('gen_random_uuid()'),
+      user_id: users[2] ? users[2].id : users[0].id,
+      product_id: insertedProducts[2].id,
+      caption: 'Unboxing and first impressions of these wireless headphones. Sound quality test coming up!',
+      media: JSON.stringify([{type: 'video', url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&h=600&fit=crop'}]),
+      tags: JSON.stringify(['unboxing', 'tech', 'review']),
+      is_active: true,
+      type: 'story',
+      created_at: knex.fn.now(),
+      updated_at: knex.fn.now()
     }
   ];
 
